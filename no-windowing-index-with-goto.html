@@ -280,6 +280,75 @@
             padding: 2px 6px;
             border-radius: 3px;
         }
+        .lsp-section {
+            padding: 8px 12px;
+            border-top: 1px solid #333;
+        }
+        .lsp-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #858585;
+            margin-bottom: 6px;
+        }
+        .lsp-row {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 6px;
+        }
+        .lsp-select {
+            flex: 1;
+            padding: 4px 6px;
+            background: #3c3c3c;
+            color: #cccccc;
+            border: 1px solid #555;
+            border-radius: 2px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .lsp-load-btn {
+            padding: 4px 10px;
+            background: #0e639c;
+            color: white;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .lsp-load-btn:hover { background: #1177bb; }
+        .lsp-load-btn:disabled { background: #555; cursor: not-allowed; }
+        .lsp-status-list {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .lsp-badge {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1e1e1e;
+            border-radius: 2px;
+            padding: 3px 6px;
+            font-size: 11px;
+        }
+        .lsp-badge-name {
+            color: #4ec9b0;
+        }
+        .lsp-badge-unload {
+            color: #858585;
+            cursor: pointer;
+            padding: 0 3px;
+            font-size: 12px;
+            line-height: 1;
+        }
+        .lsp-badge-unload:hover { color: #ff6b6b; }
+        .lsp-none {
+            font-size: 11px;
+            color: #555;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -306,6 +375,33 @@
                     <button class="load-btn" onclick="loadLanguageDefinition()">Load Language</button>
                     <button class="load-btn" onclick="loadCustomTheme()">Load Theme</button>
                     <button class="load-btn" onclick="loadSchemas()">Load Schemas</button>
+                </div>
+            </div>
+            <div class="lsp-section">
+                <div class="lsp-section-title">Language Servers (LSP)</div>
+                <div class="lsp-row">
+                    <select class="lsp-select" id="lspSelect">
+                        <option value="java">Java</option>
+                        <option value="python">Python</option>
+                        <option value="javascript">JavaScript</option>
+                        <option value="typescript">TypeScript</option>
+                        <option value="rust">Rust</option>
+                        <option value="cpp">C/C++</option>
+                        <option value="go">Go</option>
+                        <option value="csharp">C#</option>
+                        <option value="html">HTML</option>
+                        <option value="css">CSS</option>
+                        <option value="php">PHP</option>
+                        <option value="ruby">Ruby</option>
+                        <option value="kotlin">Kotlin</option>
+                        <option value="sql">SQL</option>
+                        <option value="lua">Lua</option>
+                        <option value="swift">Swift</option>
+                    </select>
+                    <button class="lsp-load-btn" id="lspLoadBtn" onclick="loadSelectedLsp()">Load</button>
+                </div>
+                <div class="lsp-status-list" id="lspStatusList">
+                    <span class="lsp-none">No LSPs loaded</span>
                 </div>
             </div>
             <div class="file-tree" id="fileTree">
@@ -1388,6 +1484,205 @@ setTimeout(() => {
         .forEach(registerGoToDefinition);
     enableCtrlClickHighlight();
 }, 2000);
+</script>
+
+<script>
+// ---- WASM LSP INTEGRATION ----
+
+// Map of language → { completionDispose, hoverDispose, diagInterval, langId }
+const loadedLsps = new Map();
+
+// Monaco language ID mapping: our LSP name → Monaco language id
+const LSP_LANG_MAP = {
+    java:       'java',
+    python:     'python',
+    javascript: 'javascript',
+    typescript: 'typescript',
+    rust:       'rust',
+    cpp:        'cpp',
+    go:         'go',
+    csharp:     'csharp',
+    html:       'html',
+    css:        'css',
+    php:        'php',
+    ruby:       'ruby',
+    kotlin:     'kotlin',
+    sql:        'sql',
+    lua:        'lua',
+    swift:      'swift',
+};
+
+async function loadSelectedLsp() {
+    const select = document.getElementById('lspSelect');
+    const btn = document.getElementById('lspLoadBtn');
+    const language = select.value;
+
+    if (loadedLsps.has(language)) {
+        alert(`${language} LSP is already loaded.`);
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+
+    try {
+        await loadLsp(language);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Load';
+    }
+}
+
+async function loadLsp(language) {
+    const basePath = `./data/lsp/${language}`;
+    const jsPath   = `${basePath}/${language}_lsp.js`;
+    const wasmPath = `${basePath}/${language}_lsp_bg.wasm`;
+
+    let mod;
+    try {
+        mod = await import(jsPath);
+    } catch (e) {
+        throw new Error(
+            `Could not load ${language} LSP module from ${jsPath}.\n` +
+            `Run the "Build LSP" GitHub Actions workflow for "${language}" first.`
+        );
+    }
+
+    // wasm-pack generates a default export that initialises the WASM binary.
+    if (typeof mod.default === 'function') {
+        await mod.default(wasmPath);
+    }
+
+    const langId = (typeof mod.language_id === 'function')
+        ? mod.language_id()
+        : (LSP_LANG_MAP[language] || language);
+
+    // Completion provider
+    const completionDispose = monaco.languages.registerCompletionItemProvider(langId, {
+        triggerCharacters: ['.', ' '],
+        provideCompletionItems(model, position) {
+            try {
+                const code   = model.getValue();
+                const line   = position.lineNumber - 1;
+                const col    = position.column  - 1;
+                const raw    = mod.get_completions(code, line, col);
+                const items  = JSON.parse(raw);
+                const word   = model.getWordUntilPosition(position);
+                const range  = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber:   position.lineNumber,
+                    startColumn:     word.startColumn,
+                    endColumn:       position.column,
+                };
+                return {
+                    suggestions: items.map(item => ({
+                        label:         item.label,
+                        kind:          item.kind,
+                        detail:        item.detail || undefined,
+                        documentation: item.documentation
+                            ? { value: item.documentation }
+                            : undefined,
+                        insertText: item.insert_text || item.label,
+                        range,
+                    })),
+                };
+            } catch (_) {
+                return { suggestions: [] };
+            }
+        },
+    });
+
+    // Hover provider
+    const hoverDispose = monaco.languages.registerHoverProvider(langId, {
+        provideHover(model, position) {
+            try {
+                const code = model.getValue();
+                const line = position.lineNumber - 1;
+                const col  = position.column  - 1;
+                const raw  = mod.get_hover(code, line, col);
+                if (!raw || raw === 'null') return null;
+                const result = JSON.parse(raw);
+                return { contents: [{ value: result.contents }] };
+            } catch (_) {
+                return null;
+            }
+        },
+    });
+
+    // Diagnostics — poll every 1.5 s while editor model matches langId
+    const diagInterval = setInterval(() => {
+        if (!editor || !editor.getModel()) return;
+        const model = editor.getModel();
+        if (!model) return;
+        const modelLang = model.getLanguageId ? model.getLanguageId() : null;
+        if (modelLang !== langId) return;
+        try {
+            const raw   = mod.get_diagnostics(model.getValue());
+            const diags = JSON.parse(raw);
+            const markers = diags.map(d => ({
+                severity:        d.severity === 1 ? monaco.MarkerSeverity.Error
+                                 : d.severity === 2 ? monaco.MarkerSeverity.Warning
+                                 : d.severity === 3 ? monaco.MarkerSeverity.Info
+                                 : monaco.MarkerSeverity.Hint,
+                startLineNumber: d.start_line + 1,
+                startColumn:     d.start_col  + 1,
+                endLineNumber:   d.end_line   + 1,
+                endColumn:       d.end_col    + 1,
+                message:         d.message,
+                source:          `${language}-lsp`,
+            }));
+            monaco.editor.setModelMarkers(model, `${language}-lsp`, markers);
+        } catch (_) { /* ignore */ }
+    }, 1500);
+
+    loadedLsps.set(language, { completionDispose, hoverDispose, diagInterval, langId });
+    updateLspStatus();
+    console.log(`[LSP] ${language} (${langId}) loaded successfully.`);
+}
+
+function unloadLsp(language) {
+    const entry = loadedLsps.get(language);
+    if (!entry) return;
+    entry.completionDispose.dispose();
+    entry.hoverDispose.dispose();
+    clearInterval(entry.diagInterval);
+
+    // Clear any markers left by this LSP
+    for (const model of monaco.editor.getModels()) {
+        monaco.editor.setModelMarkers(model, `${language}-lsp`, []);
+    }
+
+    loadedLsps.delete(language);
+    updateLspStatus();
+    console.log(`[LSP] ${language} unloaded.`);
+}
+
+function updateLspStatus() {
+    const list = document.getElementById('lspStatusList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (loadedLsps.size === 0) {
+        const none = document.createElement('span');
+        none.className = 'lsp-none';
+        none.textContent = 'No LSPs loaded';
+        list.appendChild(none);
+        return;
+    }
+
+    for (const [language] of loadedLsps) {
+        const badge = document.createElement('div');
+        badge.className = 'lsp-badge';
+        badge.innerHTML = `
+            <span class="lsp-badge-name">⚡ ${language}</span>
+            <span class="lsp-badge-unload" title="Unload ${language} LSP"
+                  onclick="unloadLsp('${language}')">✕</span>
+        `;
+        list.appendChild(badge);
+    }
+}
+
+// ---- END WASM LSP INTEGRATION ----
 </script>
 
 </body>

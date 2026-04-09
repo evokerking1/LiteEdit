@@ -1,0 +1,24 @@
+[workspace]
+members = [
+    "java-lsp",
+    "python-lsp",
+    "javascript-lsp",
+    "typescript-lsp",
+    "rust-lsp",
+    "cpp-lsp",
+    "go-lsp",
+    "csharp-lsp",
+    "html-lsp",
+    "css-lsp",
+    "php-lsp",
+    "ruby-lsp",
+    "kotlin-lsp",
+    "sql-lsp",
+    "lua-lsp",
+    "swift-lsp",
+]
+resolver = "2"
+
+[profile.release]
+opt-level = "s"
+lto = true
