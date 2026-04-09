@@ -1,0 +1,93 @@
+name: Build LSP
+
+on:
+  workflow_dispatch:
+    inputs:
+      language:
+        description: 'Language LSP to build'
+        required: true
+        type: choice
+        options:
+          - java
+          - python
+          - javascript
+          - typescript
+          - rust
+          - cpp
+          - go
+          - csharp
+          - html
+          - css
+          - php
+          - ruby
+          - kotlin
+          - sql
+          - lua
+          - swift
+
+# Only one LSP build runs at a time; a newly triggered run waits for
+# any in-progress build to finish before starting.
+concurrency:
+  group: build-lsp
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ github.event.inputs.language }} LSP → WASM
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable + wasm32 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            dev/target
+          key: ${{ runner.os }}-cargo-${{ github.event.inputs.language }}-${{ hashFiles('dev/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ github.event.inputs.language }}-
+            ${{ runner.os }}-cargo-
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'latest'
+
+      - name: Build ${{ github.event.inputs.language }} LSP
+        run: |
+          cd dev
+          wasm-pack build ${{ github.event.inputs.language }}-lsp \
+            --target web \
+            --release \
+            --out-dir ../data/lsp/${{ github.event.inputs.language }}
+
+      - name: Remove wasm-pack metadata files
+        run: |
+          rm -f data/lsp/${{ github.event.inputs.language }}/.gitignore
+          rm -f data/lsp/${{ github.event.inputs.language }}/package.json
+
+      - name: Commit built WASM artifacts
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "build(${{ github.event.inputs.language }}): compile LSP to WASM"
+          file_pattern: data/lsp/${{ github.event.inputs.language }}/**
+          commit_user_name: github-actions[bot]
+          commit_user_email: github-actions[bot]@users.noreply.github.com
+
+      - name: Upload WASM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.language }}-lsp-wasm
+          path: data/lsp/${{ github.event.inputs.language }}/
+          retention-days: 90
