@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monaco Code Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        .sidebar {
+            width: 250px;
+            background: #252526;
+            color: #cccccc;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #1e1e1e;
+        }
+        .sidebar-header {
+            padding: 12px;
+            background: #1e1e1e;
+            border-bottom: 1px solid #333;
+        }
+        .sidebar-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .button-group {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .load-btn {
+            padding: 4px 12px;
+            background: #0e639c;
+            color: white;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 11px;
+            flex: 1;
+            min-width: 70px;
+        }
+        .load-btn:hover {
+            background: #1177bb;
+        }
+        .file-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+        .workspace-item {
+            padding: 6px 12px;
+            background: #1e1e1e;
+            margin: 4px 8px;
+            border-radius: 2px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .workspace-name {
+            font-weight: 600;
+            color: #4ec9b0;
+        }
+        .close-workspace {
+            color: #858585;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+        .close-workspace:hover {
+            color: #ff6b6b;
+        }
+        .file-item, .folder-item {
+            padding: 4px 8px 4px 20px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            position: relative;
+        }
+        .file-item:hover, .folder-item:hover {
+            background: #2a2d2e;
+        }
+        .file-item:hover .file-actions,
+        .folder-item:hover .folder-actions {
+            display: flex;
+        }
+        .file-actions, .folder-actions {
+            display: none;
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            gap: 4px;
+            background: #2a2d2e;
+            padding: 2px;
+            border-radius: 2px;
+        }
+        .action-btn {
+            padding: 2px 6px;
+            background: #0e639c;
+            color: white;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 10px;
+        }
+        .action-btn:hover {
+            background: #1177bb;
+        }
+        .action-btn.delete:hover {
+            background: #ff6b6b;
+        }
+        .file-item.active {
+            background: #094771;
+        }
+        .file-item.modified::after {
+            content: ' ●';
+            color: #4ec9b0;
+        }
+        .folder-item {
+            font-weight: 500;
+        }
+        .folder-item::before {
+            content: '📁 ';
+            margin-right: 4px;
+        }
+        .folder-item.open::before {
+            content: '📂 ';
+        }
+        .file-item::before {
+            content: '📄 ';
+            margin-right: 4px;
+        }
+        .folder-contents {
+            display: none;
+            padding-left: 16px;
+        }
+        .folder-contents.open {
+            display: block;
+        }
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .tabs-container {
+            display: flex;
+            background: #2d2d30;
+            border-bottom: 1px solid #1e1e1e;
+            overflow-x: auto;
+            min-height: 35px;
+        }
+        .tab {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: #2d2d30;
+            color: #969696;
+            border-right: 1px solid #1e1e1e;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            user-select: none;
+        }
+        .tab:hover {
+            background: #1e1e1e;
+        }
+        .tab.active {
+            background: #1e1e1e;
+            color: #ffffff;
+        }
+        .tab.modified .tab-title::after {
+            content: ' ●';
+            color: #4ec9b0;
+        }
+        .tab-title {
+            margin-right: 8px;
+        }
+        .tab-close {
+            color: #858585;
+            font-weight: bold;
+            padding: 0 4px;
+            border-radius: 2px;
+        }
+        .tab-close:hover {
+            background: #ff6b6b;
+            color: white;
+        }
+        .editor-header {
+            padding: 8px 16px;
+            background: #1e1e1e;
+            color: #cccccc;
+            border-bottom: 1px solid #333;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .editor-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .save-btn, .load-lang-btn {
+            padding: 4px 12px;
+            background: #0e639c;
+            color: white;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .save-btn:hover, .load-lang-btn:hover {
+            background: #1177bb;
+        }
+        .save-btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        .language-select, .theme-select {
+            padding: 4px 8px;
+            background: #3c3c3c;
+            color: #cccccc;
+            border: 1px solid #555;
+            border-radius: 2px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .keybind-hint {
+            font-size: 10px;
+            color: #858585;
+            margin-left: 4px;
+        }
+        #editor {
+            flex: 1;
+        }
+        .placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6e6e6e;
+            font-size: 14px;
+        }
+        .setup-message {
+            padding: 20px;
+            background: #f0f0f0;
+            border: 2px solid #ff6b6b;
+            margin: 20px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .setup-message h3 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+        }
+        .setup-message ol {
+            margin-left: 20px;
+            line-height: 1.8;
+        }
+        .setup-message code {
+            background: #e0e0e0;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-message">
+        <h3>⚠️ Setup Required</h3>
+        <p>To use Monaco Editor offline, you need to:</p>
+        <ol>
+            <li>Download Monaco Editor from: <code>https://github.com/microsoft/monaco-editor/releases</code></li>
+            <li>Extract the files to a folder named <code>monaco-editor</code> in the same directory as this HTML file</li>
+            <li>The folder structure should be: <code>monaco-editor/min/vs/</code></li>
+            <button onclick="window.location.reload()" style="background-color: #3269e8ff; color: #9a2121ff; border: none; padding: 15px 32px;">Reload this page</li>
+        </ol>
+        <p style="margin-top: 10px;"><strong>Alternative:</strong> You can also use <code>npm install monaco-editor</code> and adjust the path below to <code>node_modules/monaco-editor/min/vs</code></p>
+    </div>
+
+    <div class="container" style="display: none;" id="mainContainer">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">Explorer</span>
+                <div class="button-group">
+                    <button class="load-btn" onclick="loadFolder()">
+                        Open Folder <span class="keybind-hint">Ctrl+O</span>
+                    </button>
+                    <button class="load-btn" onclick="loadLanguageDefinition()">Load Language</button>
+                    <button class="load-btn" onclick="loadCustomTheme()">Load Theme</button>
+                    <button class="load-btn" onclick="loadSchemas()">Load Schemas</button>
+                </div>
+            </div>
+            <div class="file-tree" id="fileTree">
+                <div class="placeholder">No folder loaded</div>
+            </div>
+        </div>
+        <div class="editor-container">
+            <div class="tabs-container" id="tabsContainer"></div>
+            <div class="editor-header">
+                <span id="currentFile">No file selected</span>
+                <div class="editor-controls">
+                    <select class="theme-select" id="themeSelect" onchange="changeTheme()">
+                        <option value="vs-dark">Dark</option>
+                        <option value="vs">Light</option>
+                        <option value="hc-black">High Contrast</option>
+                    </select>
+                    <select class="language-select" id="languageSelect" onchange="changeLanguage()">
+                        <option value="">Auto-detect</option>
+                    </select>
+                    <button class="load-lang-btn" onclick="loadLanguageDefinition()">Load Language</button>
+                    <button class="save-btn" id="saveBtn" onclick="saveFile()" disabled>
+                        Save <span class="keybind-hint">Ctrl+S</span>
+                    </button>
+                </div>
+            </div>
+            <div id="editor"></div>
+        </div>
+    </div>
+
+    <script>
+        // Check if Monaco is available locally
+        const monacoPath = './monaco-editor/min/vs';
+        
+        // Try to load Monaco from local path
+        const loaderScript = document.createElement('script');
+        loaderScript.src = monacoPath + '/loader.js';
+        loaderScript.onerror = function() {
+            console.error('Monaco Editor not found locally. Please follow setup instructions.');
+        };
+        loaderScript.onload = function() {
+            document.querySelector('.setup-message').style.display = 'none';
+            document.getElementById('mainContainer').style.display = 'flex';
+            initMonaco();
+        };
+        document.head.appendChild(loaderScript);
+
+        let editor;
+        let monaco;
+        let currentFileHandle;
+        let currentFileElement;
+        let fileHandles = new Map();
+        let workspaces = [];
+        let isModified = false;
+        let customLanguages = new Map();
+        let customThemes = new Map();
+        let currentTheme = 'vs-dark';
+        let openTabs = [];
+        let currentTabIndex = -1;
+        let editorStates = new Map(); // Store editor states for each tab
+        let schemasLoaded = false;
+
+        // JSON Schemas
+        const monarchSchema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Monaco Monarch Language Definition",
+            "type": "object",
+            "required": ["id", "monarchDefinition"],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Unique language identifier"
+                },
+                "monarchDefinition": {
+                    "type": "object",
+                    "required": ["tokenizer"],
+                    "properties": {
+                        "defaultToken": {
+                            "type": "string",
+                            "description": "Default token type"
+                        },
+                        "tokenPostfix": {
+                            "type": "string",
+                            "description": "Token postfix"
+                        },
+                        "ignoreCase": {
+                            "type": "boolean",
+                            "description": "Whether the language is case-insensitive"
+                        },
+                        "brackets": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "open": { "type": "string" },
+                                    "close": { "type": "string" },
+                                    "token": { "type": "string" }
+                                }
+                            }
+                        },
+                        "tokenizer": {
+                            "type": "object",
+                            "description": "Tokenizer rules",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 3
+                                }
+                            }
+                        }
+                    }
+                },
+                "configuration": {
+                    "type": "object",
+                    "properties": {
+                        "comments": {
+                            "type": "object",
+                            "properties": {
+                                "lineComment": { "type": "string" },
+                                "blockComment": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "minItems": 2,
+                                    "maxItems": 2
+                                }
+                            }
+                        },
+                        "brackets": {
+                            "type": "array",
+                            "items": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "minItems": 2,
+                                "maxItems": 2
+                            }
+                        },
+                        "autoClosingPairs": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "open": { "type": "string" },
+                                    "close": { "type": "string" },
+                                    "notIn": {
+                                        "type": "array",
+                                        "items": { "type": "string" }
+                                    }
+                                }
+                            }
+                        },
+                        "surroundingPairs": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "open": { "type": "string" },
+                                    "close": { "type": "string" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        const themeSchema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Monaco Editor Theme Definition",
+            "type": "object",
+            "required": ["name", "base", "colors", "rules"],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Unique theme name"
+                },
+                "base": {
+                    "type": "string",
+                    "enum": ["vs", "vs-dark", "hc-black"],
+                    "description": "Base theme to inherit from"
+                },
+                "inherit": {
+                    "type": "boolean",
+                    "description": "Whether to inherit from base theme",
+                    "default": true
+                },
+                "colors": {
+                    "type": "object",
+                    "description": "Editor color customizations",
+                    "properties": {
+                        "editor.background": { "type": "string" },
+                        "editor.foreground": { "type": "string" },
+                        "editor.lineHighlightBackground": { "type": "string" },
+                        "editor.selectionBackground": { "type": "string" },
+                        "editorCursor.foreground": { "type": "string" },
+                        "editorLineNumber.foreground": { "type": "string" },
+                        "editorLineNumber.activeForeground": { "type": "string" },
+                        "editorIndentGuide.background": { "type": "string" },
+                        "editorWhitespace.foreground": { "type": "string" },
+                        "editorWidget.background": { "type": "string" },
+                        "editorWidget.border": { "type": "string" },
+                        "editorSuggestWidget.background": { "type": "string" },
+                        "editorSuggestWidget.foreground": { "type": "string" },
+                        "editorSuggestWidget.selectedBackground": { "type": "string" }
+                    },
+                    "additionalProperties": { "type": "string" }
+                },
+                "rules": {
+                    "type": "array",
+                    "description": "Syntax token color rules",
+                    "items": {
+                        "type": "object",
+                        "required": ["token"],
+                        "properties": {
+                            "token": {
+                                "type": "string",
+                                "description": "Token type"
+                            },
+                            "foreground": {
+                                "type": "string",
+                                "description": "Foreground color (hex without #)"
+                            },
+                            "background": {
+                                "type": "string",
+                                "description": "Background color (hex without #)"
+                            },
+                            "fontStyle": {
+                                "type": "string",
+                                "enum": ["", "italic", "bold", "underline", "italic bold", "bold italic"],
+                                "description": "Font style"
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        function initMonaco() {
+            require.config({ paths: { vs: monacoPath }});
+            
+            require(['vs/editor/editor.main'], function(monacoInstance) {
+                monaco = monacoInstance;
+                editor = monaco.editor.create(document.getElementById('editor'), {
+                    value: '',
+                    theme: 'vs-dark',
+                    automaticLayout: true
+                });
+
+                // Populate language selector
+                populateLanguageSelector();
+
+                // Track modifications
+                editor.onDidChangeModelContent(() => {
+                    if (currentTabIndex >= 0) {
+                        const tab = openTabs[currentTabIndex];
+                        if (!tab.modified) {
+                            tab.modified = true;
+                            updateTabs();
+                        }
+                    }
+                });
+
+                // Load default schemas
+                loadDefaultSchemas();
+            });
+        }
+
+        function loadDefaultSchemas() {
+            // Configure JSON language to use our schemas
+            monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+                validate: true,
+                schemas: [
+                    {
+                        uri: "http://monaco-editor/monarch-schema.json",
+                        fileMatch: ["*monarch*.json", "*language*.json", "language.json"],
+                        schema: monarchSchema
+                    },
+                    {
+                        uri: "http://monaco-editor/theme-schema.json",
+                        fileMatch: ["*theme*.json", "theme.json"],
+                        schema: themeSchema
+                    }
+                ]
+            });
+            schemasLoaded = true;
+        }
+
+        async function loadSchemas() {
+            try {
+                const handles = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'JSON Schema Files',
+                        accept: { 'application/json': ['.json'] }
+                    }],
+                    multiple: true
+                });
+
+                const schemas = monaco.languages.json.jsonDefaults.diagnosticsOptions.schemas || [];
+
+                for (const handle of handles) {
+                    const file = await handle.getFile();
+                    const content = await file.text();
+                    const schema = JSON.parse(content);
+
+                    // Prompt for file match pattern
+                    const fileMatch = prompt(`Enter file match pattern for ${file.name} (e.g., *config*.json):`, `*${file.name}`);
+                    
+                    if (fileMatch) {
+                        schemas.push({
+                            uri: `http://monaco-editor/custom-${file.name}`,
+                            fileMatch: [fileMatch],
+                            schema: schema
+                        });
+                    }
+                }
+
+                monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+                    validate: true,
+                    schemas: schemas
+                });
+
+                alert(`${handles.length} schema(s) loaded successfully!`);
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Error loading schemas:', err);
+                    alert('Failed to load schemas: ' + err.message);
+                }
+            }
+            };
+        
+
+        function populateLanguageSelector() {
+            const select = document.getElementById('languageSelect');
+            const languages = monaco.languages.getLanguages();
+            
+            languages.sort((a, b) => a.id.localeCompare(b.id));
+            
+            languages.forEach(lang => {
+                const option = document.createElement('option');
+                option.value = lang.id;
+                option.textContent = lang.id;
+                select.appendChild(option);
+            });
+        }
+
+        function changeLanguage() {
+            const select = document.getElementById('languageSelect');
+            const language = select.value;
+            
+            if (language && editor.getModel()) {
+                monaco.editor.setModelLanguage(editor.getModel(), language);
+            }
+        }
+
+        function changeTheme() {
+            const select = document.getElementById('themeSelect');
+            const theme = select.value;
+            currentTheme = theme;
+            monaco.editor.setTheme(theme);
+            
+            // Get theme data to update sidebar
+            const themeData = customThemes.get(theme);
+            
+            // Update sidebar colors based on theme
+            if (theme === 'vs' || (themeData && themeData.base === 'vs')) {
+                // Light theme
+                document.querySelector('.sidebar').style.background = '#f3f3f3';
+                document.querySelector('.sidebar').style.color = '#333';
+                document.querySelector('.sidebar-header').style.background = '#e0e0e0';
+                document.querySelector('.file-tree').style.color = '#333';
+            } else if (theme === 'hc-black' || (themeData && themeData.base === 'hc-black')) {
+                // High contrast theme
+                document.querySelector('.sidebar').style.background = '#000000';
+                document.querySelector('.sidebar').style.color = '#ffffff';
+                document.querySelector('.sidebar-header').style.background = '#000000';
+                document.querySelector('.file-tree').style.color = '#ffffff';
+            } else {
+                // Dark theme (default)
+                document.querySelector('.sidebar').style.background = '#252526';
+                document.querySelector('.sidebar').style.color = '#cccccc';
+                document.querySelector('.sidebar-header').style.background = '#1e1e1e';
+                document.querySelector('.file-tree').style.color = '#cccccc';
+            }
+        }
+
+        async function loadCustomTheme() {
+            try {
+                const [fileHandle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'JSON Theme Definition',
+                        accept: { 'application/json': ['.json'] }
+                    }],
+                    multiple: false
+                });
+
+                const file = await fileHandle.getFile();
+                const content = await file.text();
+                const themeDef = JSON.parse(content);
+
+                // Validate theme definition
+                if (!themeDef.name || !themeDef.base || !themeDef.colors || !themeDef.rules) {
+                    alert('Invalid theme definition. Must contain "name", "base", "colors", and "rules".');
+                    return;
+                }
+
+                // Define the theme in Monaco
+                monaco.editor.defineTheme(themeDef.name, {
+                    base: themeDef.base,
+                    inherit: themeDef.inherit !== false,
+                    rules: themeDef.rules,
+                    colors: themeDef.colors
+                });
+
+                // Store theme data
+                customThemes.set(themeDef.name, themeDef);
+
+                // Add to theme selector
+                const select = document.getElementById('themeSelect');
+                
+                // Check if theme already exists in selector
+                let optionExists = false;
+                for (let i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value === themeDef.name) {
+                        optionExists = true;
+                        break;
+                    }
+                }
+                
+                if (!optionExists) {
+                    const option = document.createElement('option');
+                    option.value = themeDef.name;
+                    option.textContent = themeDef.name;
+                    select.appendChild(option);
+                }
+
+                // Apply the theme
+                select.value = themeDef.name;
+                changeTheme();
+
+                alert(`Theme '${themeDef.name}' loaded successfully!`);
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Error loading theme:', err);
+                    alert('Failed to load theme: ' + err.message);
+                }
+            }
+        }
+
+        async function loadFolder() {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                
+                // Add to workspaces
+                workspaces.push({
+                    name: dirHandle.name,
+                    handle: dirHandle
+                });
+                
+                await rebuildFileTree();
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Error loading folder:', err);
+                }
+            }
+        }
+
+        async function rebuildFileTree() {
+            const treeContainer = document.getElementById('fileTree');
+            treeContainer.innerHTML = '';
+            
+            for (let i = 0; i < workspaces.length; i++) {
+                const workspace = workspaces[i];
+                
+                // Workspace header
+                const workspaceDiv = document.createElement('div');
+                workspaceDiv.className = 'workspace-item';
+                workspaceDiv.innerHTML = `
+                    <span class="workspace-name">${workspace.name}</span>
+                    <span class="close-workspace" onclick="removeWorkspace(${i})">✕</span>
+                `;
+                treeContainer.appendChild(workspaceDiv);
+                
+                // Build tree for this workspace
+                await buildFileTree(workspace.handle, treeContainer);
+            }
+        }
+
+        function removeWorkspace(index) {
+            workspaces.splice(index, 1);
+            rebuildFileTree();
+        }
+
+        async function buildFileTree(dirHandle, parentElement) {
+            const entries = [];
+            for await (const entry of dirHandle.values()) {
+                entries.push(entry);
+            }
+
+            entries.sort((a, b) => {
+                if (a.kind !== b.kind) {
+                    return a.kind === 'directory' ? -1 : 1;
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+            for (const entry of entries) {
+                if (entry.kind === 'directory') {
+                    const folderDiv = document.createElement('div');
+                    folderDiv.className = 'folder-item';
+                    folderDiv.textContent = entry.name;
+                    
+                    const folderActions = document.createElement('div');
+                    folderActions.className = 'folder-actions';
+                    folderActions.innerHTML = `
+                        <button class="action-btn" onclick="event.stopPropagation(); createNewFile(event, '${entry.name}')">+ File</button>
+                        <button class="action-btn" onclick="event.stopPropagation(); createNewFolder(event, '${entry.name}')">+ Folder</button>
+                    `;
+                    folderDiv.appendChild(folderActions);
+                    
+                    const contentsDiv = document.createElement('div');
+                    contentsDiv.className = 'folder-contents';
+                    
+                    // Store reference to directory handle
+                    folderDiv.dataset.dirHandle = JSON.stringify({ name: entry.name });
+                    folderDiv._dirHandle = entry;
+                    contentsDiv._parentDirHandle = entry;
+                    
+                    folderDiv.onclick = async (e) => {
+                        e.stopPropagation();
+                        folderDiv.classList.toggle('open');
+                        contentsDiv.classList.toggle('open');
+                        
+                        if (contentsDiv.classList.contains('open') && contentsDiv.children.length === 0) {
+                            await buildFileTree(entry, contentsDiv);
+                        }
+                    };
+                    
+                    parentElement.appendChild(folderDiv);
+                    parentElement.appendChild(contentsDiv);
+                } else {
+                    const fileDiv = document.createElement('div');
+                    fileDiv.className = 'file-item';
+                    fileDiv.textContent = entry.name;
+                    
+                    const fileActions = document.createElement('div');
+                    fileActions.className = 'file-actions';
+                    fileActions.innerHTML = `
+                        <button class="action-btn delete" onclick="event.stopPropagation(); deleteFile(event, '${entry.name}')">Del</button>
+                    `;
+                    fileDiv.appendChild(fileActions);
+                    
+                    const path = entry.name;
+                    fileHandles.set(path, entry);
+                    
+                    // Store parent directory handle
+                    fileDiv._fileHandle = entry;
+                    fileDiv._parentElement = parentElement;
+                    
+                    fileDiv.onclick = () => openFile(entry, path, fileDiv);
+                    parentElement.appendChild(fileDiv);
+                }
+            }
+        }
+
+        async function createNewFile(event, parentFolderName) {
+            const fileName = prompt('Enter file name:');
+            if (!fileName) return;
+
+            try {
+                // Find the parent directory handle
+                let parentDirHandle = null;
+                
+                // Search through workspaces and their folders
+                for (const workspace of workspaces) {
+                    if (workspace.name === parentFolderName) {
+                        parentDirHandle = workspace.handle;
+                        break;
+                    }
+                    // Check nested folders
+                    parentDirHandle = await findDirHandleByName(workspace.handle, parentFolderName);
+                    if (parentDirHandle) break;
+                }
+
+                if (!parentDirHandle) {
+                    alert('Could not find parent directory');
+                    return;
+                }
+
+                // Create the file
+                const fileHandle = await parentDirHandle.getFileHandle(fileName, { create: true });
+                
+                // Write empty content
+                const writable = await fileHandle.createWritable();
+                await writable.write('');
+                await writable.close();
+
+                // Refresh the file tree
+                await rebuildFileTree();
+                
+                // Open the new file
+                const fileDiv = document.querySelector(`.file-item[textContent*="${fileName}"]`);
+                if (fileDiv) {
+                    await openFile(fileHandle, fileName, fileDiv);
+                }
+            } catch (err) {
+                console.error('Error creating file:', err);
+                alert('Failed to create file: ' + err.message);
+            }
+        }
+
+        async function createNewFolder(event, parentFolderName) {
+            const folderName = prompt('Enter folder name:');
+            if (!folderName) return;
+
+            try {
+                // Find the parent directory handle
+                let parentDirHandle = null;
+                
+                for (const workspace of workspaces) {
+                    if (workspace.name === parentFolderName) {
+                        parentDirHandle = workspace.handle;
+                        break;
+                    }
+                    parentDirHandle = await findDirHandleByName(workspace.handle, parentFolderName);
+                    if (parentDirHandle) break;
+                }
+
+                if (!parentDirHandle) {
+                    alert('Could not find parent directory');
+                    return;
+                }
+
+                // Create the directory
+                await parentDirHandle.getDirectoryHandle(folderName, { create: true });
+
+                // Refresh the file tree
+                await rebuildFileTree();
+            } catch (err) {
+                console.error('Error creating folder:', err);
+                alert('Failed to create folder: ' + err.message);
+            }
+        }
+
+        async function deleteFile(event, fileName) {
+            if (!confirm(`Are you sure you want to delete '${fileName}'?`)) {
+                return;
+            }
+
+            try {
+                // Find parent directory and delete file
+                for (const workspace of workspaces) {
+                    try {
+                        await workspace.handle.removeEntry(fileName);
+                        await rebuildFileTree();
+                        
+                        // Close tab if file is open
+                        const tabIndex = openTabs.findIndex(tab => tab.name === fileName);
+                        if (tabIndex >= 0) {
+                            await closeTab(tabIndex);
+                        }
+                        
+                        return;
+                    } catch (e) {
+                        // File not in this workspace, try subdirectories
+                        const deleted = await deleteFileRecursive(workspace.handle, fileName);
+                        if (deleted) {
+                            await rebuildFileTree();
+                            
+                            const tabIndex = openTabs.findIndex(tab => tab.name === fileName);
+                            if (tabIndex >= 0) {
+                                await closeTab(tabIndex);
+                            }
+                            return;
+                        }
+                    }
+                }
+                
+                alert('Could not find file to delete');
+            } catch (err) {
+                console.error('Error deleting file:', err);
+                alert('Failed to delete file: ' + err.message);
+            }
+        }
+
+        async function deleteFileRecursive(dirHandle, fileName) {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'directory') {
+                    const deleted = await deleteFileRecursive(entry, fileName);
+                    if (deleted) return true;
+                } else if (entry.name === fileName) {
+                    await dirHandle.removeEntry(fileName);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        async function findDirHandleByName(dirHandle, targetName) {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'directory') {
+                    if (entry.name === targetName) {
+                        return entry;
+                    }
+                    const found = await findDirHandleByName(entry, targetName);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        async function openFile(fileHandle, path, element) {
+            try {
+                // Check if file is already open in a tab
+                const existingTabIndex = openTabs.findIndex(tab => tab.path === path);
+                
+                if (existingTabIndex >= 0) {
+                    // Switch to existing tab
+                    switchToTab(existingTabIndex);
+                    return;
+                }
+
+                const file = await fileHandle.getFile();
+                const content = await file.text();
+                
+                const language = getLanguageFromFileName(file.name);
+                
+                // Create new tab
+                const tab = {
+                    name: file.name,
+                    path: path,
+                    fileHandle: fileHandle,
+                    fileElement: element,
+                    content: content,
+                    language: language,
+                    modified: false,
+                    viewState: null
+                };
+                
+                openTabs.push(tab);
+                currentTabIndex = openTabs.length - 1;
+                
+                // Update UI
+                updateTabs();
+                loadTabContent(currentTabIndex);
+                
+                document.querySelectorAll('.file-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                element.classList.add('active');
+            } catch (err) {
+                console.error('Error opening file:', err);
+                alert('Failed to open file: ' + err.message);
+            }
+        }
+
+        function updateTabs() {
+            const container = document.getElementById('tabsContainer');
+            container.innerHTML = '';
+            
+            openTabs.forEach((tab, index) => {
+                const tabEl = document.createElement('div');
+                tabEl.className = 'tab' + (index === currentTabIndex ? ' active' : '') + (tab.modified ? ' modified' : '');
+                
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'tab-title';
+                titleSpan.textContent = tab.name;
+                
+                const closeBtn = document.createElement('span');
+                closeBtn.className = 'tab-close';
+                closeBtn.textContent = '×';
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    closeTab(index);
+                };
+                
+                tabEl.appendChild(titleSpan);
+                tabEl.appendChild(closeBtn);
+                
+                tabEl.onclick = () => switchToTab(index);
+                
+                container.appendChild(tabEl);
+            });
+        }
+
+        function switchToTab(index) {
+            if (index < 0 || index >= openTabs.length) return;
+            
+            // Save current editor state
+            if (currentTabIndex >= 0 && editor.getModel()) {
+                openTabs[currentTabIndex].viewState = editor.saveViewState();
+                openTabs[currentTabIndex].content = editor.getValue();
+            }
+            
+            currentTabIndex = index;
+            loadTabContent(index);
+            updateTabs();
+        }
+
+        function loadTabContent(index) {
+            const tab = openTabs[index];
+            
+            currentFileHandle = tab.fileHandle;
+            currentFileElement = tab.fileElement;
+            
+            editor.setValue(tab.content);
+            monaco.editor.setModelLanguage(editor.getModel(), tab.language);
+            
+            // Restore view state
+            if (tab.viewState) {
+                editor.restoreViewState(tab.viewState);
+            }
+            
+            // Update UI
+            document.getElementById('currentFile').textContent = tab.name;
+            document.getElementById('languageSelect').value = tab.language;
+            document.getElementById('saveBtn').disabled = false;
+            
+            // Update active file in tree
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            if (tab.fileElement) {
+                tab.fileElement.classList.add('active');
+            }
+        }
+
+        async function closeTab(index) {
+            if (index < 0 || index >= openTabs.length) return;
+            
+            const tab = openTabs[index];
+            
+            // Check for unsaved changes
+            if (tab.modified) {
+                const shouldClose = confirm(`'${tab.name}' has unsaved changes. Close anyway?`);
+                if (!shouldClose) return;
+            }
+            
+            // Remove tab
+            openTabs.splice(index, 1);
+            
+            // Update current index
+            if (currentTabIndex === index) {
+                if (openTabs.length === 0) {
+                    currentTabIndex = -1;
+                    editor.setValue('');
+                    document.getElementById('currentFile').textContent = 'No file selected';
+                    document.getElementById('saveBtn').disabled = true;
+                    currentFileHandle = null;
+                    currentFileElement = null;
+                } else {
+                    currentTabIndex = Math.min(index, openTabs.length - 1);
+                    loadTabContent(currentTabIndex);
+                }
+            } else if (currentTabIndex > index) {
+                currentTabIndex--;
+            }
+            
+            // Clear active state from file tree
+            if (tab.fileElement) {
+                tab.fileElement.classList.remove('active');
+            }
+            
+            updateTabs();
+        }
+
+        async function saveFile() {
+            if (currentTabIndex < 0) {
+                alert('No file is currently open');
+                return;
+            }
+
+            const tab = openTabs[currentTabIndex];
+            
+            try {
+                const writable = await tab.fileHandle.createWritable();
+                const content = editor.getValue();
+                await writable.write(content);
+                await writable.close();
+                
+                tab.modified = false;
+                tab.content = content;
+                updateTabs();
+                
+                if (tab.fileElement) {
+                    tab.fileElement.classList.remove('modified');
+                }
+                
+                alert('File saved successfully!');
+            } catch (err) {
+                console.error('Error saving file:', err);
+                alert('Failed to save file: ' + err.message);
+            }
+        }
+
+        async function loadLanguageDefinition() {
+            try {
+                const [fileHandle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'JSON Language Definition',
+                        accept: { 'application/json': ['.json'] }
+                    }],
+                    multiple: false
+                });
+
+                const file = await fileHandle.getFile();
+                const content = await file.text();
+                const langDef = JSON.parse(content);
+
+                // Register the language
+                if (langDef.id && langDef.monarchDefinition) {
+                    // Register language if not already registered
+                    const existingLang = monaco.languages.getLanguages().find(l => l.id === langDef.id);
+                    if (!existingLang) {
+                        monaco.languages.register({ id: langDef.id });
+                    }
+
+                    // Set monarch tokenizer
+                    monaco.languages.setMonarchTokensProvider(langDef.id, langDef.monarchDefinition);
+
+                    // Set language configuration if provided
+                    if (langDef.configuration) {
+                        monaco.languages.setLanguageConfiguration(langDef.id, langDef.configuration);
+                    }
+
+                    customLanguages.set(langDef.id, langDef);
+
+                    // Refresh language selector
+                    populateLanguageSelector();
+
+                    alert(`Language '${langDef.id}' loaded successfully!`);
+                } else {
+                    alert('Invalid language definition. Must contain "id" and "monarchDefinition".');
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Error loading language definition:', err);
+                    alert('Failed to load language definition: ' + err.message);
+                }
+            }
+        }
+
+        function getLanguageFromFileName(fileName) {
+            const ext = fileName.split('.').pop().toLowerCase();
+            const languageMap = {
+                'js': 'javascript',
+                'ts': 'typescript',
+                'jsx': 'javascript',
+                'tsx': 'typescript',
+                'py': 'python',
+                'java': 'java',
+                'c': 'c',
+                'cpp': 'cpp',
+                'cc': 'cpp',
+                'cxx': 'cpp',
+                'cs': 'csharp',
+                'html': 'html',
+                'htm': 'html',
+                'css': 'css',
+                'scss': 'scss',
+                'sass': 'scss',
+                'json': 'json',
+                'xml': 'xml',
+                'md': 'markdown',
+                'sql': 'sql',
+                'sh': 'shell',
+                'bash': 'shell',
+                'yaml': 'yaml',
+                'yml': 'yaml',
+                'rs': 'rust',
+                'go': 'go',
+                'php': 'php',
+                'rb': 'ruby',
+                'swift': 'swift',
+                'kt': 'kotlin',
+                'dart': 'dart',
+                'lua': 'lua',
+                'r': 'r',
+                'pl': 'perl',
+                'scala': 'scala'
+            };
+            return languageMap[ext] || 'plaintext';
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+S or Cmd+S for Save
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (!document.getElementById('saveBtn').disabled) {
+                    saveFile();
+                }
+            }
+            
+            // Ctrl+O or Cmd+O for Open Folder
+            if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+                e.preventDefault();
+                loadFolder();
+            }
+            
+            // Ctrl+W or Cmd+W for Close Tab
+            if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+                e.preventDefault();
+                if (currentTabIndex >= 0) {
+                    closeTab(currentTabIndex);
+                }
+            }
+            
+            // Ctrl+Tab for Next Tab
+            if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
+                e.preventDefault();
+                if (openTabs.length > 0) {
+                    const nextIndex = (currentTabIndex + 1) % openTabs.length;
+                    switchToTab(nextIndex);
+                }
+            }
+            
+            // Ctrl+Shift+Tab for Previous Tab
+            if (e.ctrlKey && e.key === 'Tab' && e.shiftKey) {
+                e.preventDefault();
+                if (openTabs.length > 0) {
+                    const prevIndex = currentTabIndex - 1 < 0 ? openTabs.length - 1 : currentTabIndex - 1;
+                    switchToTab(prevIndex);
+                }
+            }
+        });
+    </script>
+
+<script>
+// ---- GO TO DEFINITION + CLICKABLE SYMBOLS ---- \\
+function registerGoToDefinition(lang) {
+    monaco.languages.registerDefinitionProvider(lang, {
+        provideDefinition(model, position) {
+            const word = model.getWordAtPosition(position);
+            if (!word) return null;
+
+            const text = model.getValue();
+            const regex = new RegExp(
+                `(function\\s+${word.word}\\s*\\(|` +
+                `class\\s+${word.word}\\b|` +
+                `${word.word}\\s*=\\s*\\(|` +
+                `${word.word}\\s*:\\s*function\\s*\\()`,
+                "g"
+            );
+
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                const index = match.index;
+                const pos = model.getPositionAt(index);
+                return {
+                    range: new monaco.Range(
+                        pos.lineNumber, pos.column,
+                        pos.lineNumber, pos.column + word.word.length
+                    ),
+                    uri: model.uri
+                };
+            }
+            return null;
+        }
+    });
+}
+
+// ---- END 4GO TO DEFINITION + CLICKABLE SYMBOLS ---- \\
+
+function enableCtrlClickHighlight() {
+    editor.onMouseMove((e) => {
+        const pos = e.target.position;
+        if (!pos) { document.body.style.cursor = "default"; return; }
+        const model = editor.getModel();
+        const word = model.getWordAtPosition(pos);
+        if (!word) { document.body.style.cursor = "default"; return; }
+
+        if (e.event.ctrlKey) document.body.style.cursor = "pointer";
+        else document.body.style.cursor = "text";
+    });
+}
+
+// Register definitions once editor exists
+setTimeout(() => {
+    ["javascript", "typescript", "json", "python", "html", "css", "rust"]
+        .forEach(registerGoToDefinition);
+    enableCtrlClickHighlight();
+}, 2000);
+</script>
+
+</body>
+</html>
