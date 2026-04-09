@@ -261,3 +261,107 @@ pub fn get_diagnostics(code: &str) -> String {
     let diags = count_braces(code);
     serde_json::to_string(&diags).unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[allow(unused_imports)]
+    use serde_json;
+
+    #[test]
+    fn test_language_id() {
+        assert_eq!(language_id(), "python");
+    }
+
+    #[test]
+    fn test_completions_all() {
+        let result = get_completions("", 0, 0);
+        let items: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
+        assert!(items.len() > 0);
+    }
+
+    #[test]
+    fn test_completions_prefix_match() {
+        let result = get_completions("de", 0, 2);
+        let items: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
+        assert!(items.len() > 0);
+        for item in &items {
+            let label = item["label"].as_str().unwrap().to_lowercase();
+            assert!(label.starts_with("de"), "label '{}' does not start with 'de'", label);
+        }
+    }
+
+    #[test]
+    fn test_completions_no_match() {
+        let result = get_completions("ZZZNOTAWORD", 0, 11);
+        let items: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_hover_known_keyword() {
+        let result = get_hover("def my_func():", 0, 1);
+        assert_ne!(result, "null");
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed["contents"].as_str().unwrap().contains("Defines a function."));
+    }
+
+    #[test]
+    fn test_hover_unknown_word() {
+        let result = get_hover("xyzunknown something", 0, 2);
+        assert_eq!(result, "null");
+    }
+
+    #[test]
+    fn test_diagnostics_valid_code() {
+        let result = get_diagnostics("{ }");
+        let diags: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_diagnostics_unclosed_brace() {
+        let result = get_diagnostics("{ {");
+        let diags: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
+        assert!(diags.len() > 0);
+    }
+
+    #[test]
+    fn test_diagnostics_unexpected_close() {
+        let result = get_diagnostics("}");
+        let diags: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0]["message"].as_str().unwrap().contains("Unexpected"));
+    }
+
+    #[test]
+    fn test_prefix_at_helper() {
+        assert_eq!(prefix_at("hello world", 0, 5), "hello");
+        assert_eq!(prefix_at("", 0, 0), "");
+        assert_eq!(prefix_at("hello world", 99, 0), "");
+    }
+
+    #[test]
+    fn test_word_at_helper() {
+        assert_eq!(word_at("hello world", 0, 2), Some("hello".to_string()));
+        assert_eq!(word_at("hello world", 0, 5), None);
+        assert_eq!(word_at("hello", 99, 0), None);
+    }
+
+    #[test]
+    fn test_completions_json_valid() {
+        let result = get_completions("", 0, 0);
+        assert_ne!(result, "");
+        let parsed = serde_json::from_str::<Vec<serde_json::Value>>(&result);
+        assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn test_hover_json_valid_or_null() {
+        let result = get_hover("xyz 123", 0, 0);
+        if result != "null" {
+            let parsed = serde_json::from_str::<serde_json::Value>(&result);
+            assert!(parsed.is_ok());
+        }
+    }
+}
