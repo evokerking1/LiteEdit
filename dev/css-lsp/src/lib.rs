@@ -345,14 +345,14 @@ mod tests {
     fn test_completions_all() {
         let result = get_completions("", 0, 0);
         let items: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
-        assert!(items.len() > 0);
+        assert!(!items.is_empty());
     }
 
     #[test]
     fn test_completions_prefix_match() {
         let result = get_completions("co", 0, 2);
         let items: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
-        assert!(items.len() > 0);
+        assert!(!items.is_empty());
         for item in &items {
             let label = item["label"].as_str().unwrap().to_lowercase();
             assert!(label.starts_with("co"), "label '{}' does not start with 'co'", label);

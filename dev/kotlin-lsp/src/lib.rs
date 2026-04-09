@@ -328,14 +328,14 @@ mod tests {
     fn test_completions_all() {
         let result = get_completions("", 0, 0);
         let items: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
-        assert!(items.len() > 0);
+        assert!(!items.is_empty());
     }
 
     #[test]
     fn test_completions_prefix_match() {
         let result = get_completions("fu", 0, 2);
         let items: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
-        assert!(items.len() > 0);
+        assert!(!items.is_empty());
         for item in &items {
             let label = item["label"].as_str().unwrap().to_lowercase();
             assert!(label.starts_with("fu"), "label '{}' does not start with 'fu'", label);
@@ -374,7 +374,7 @@ mod tests {
     fn test_diagnostics_unclosed_brace() {
         let result = get_diagnostics("{ {");
         let diags: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
-        assert!(diags.len() > 0);
+        assert!(!diags.is_empty());
     }
 
     #[test]
