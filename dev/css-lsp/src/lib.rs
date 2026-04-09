@@ -333,8 +333,6 @@ pub fn get_diagnostics(code: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[allow(unused_imports)]
-    use serde_json;
 
     #[test]
     fn test_language_id() {
