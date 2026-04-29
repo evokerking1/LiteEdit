@@ -81,7 +81,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "build(${{ github.event.inputs.language }}): compile LSP to WASM"
-          file_pattern: data/lsp/${{ github.event.inputs.language }}/**
+          file_pattern: dev/data/lsp/${{ github.event.inputs.language }}/**
           commit_user_name: github-actions[bot]
           commit_user_email: github-actions[bot]@users.noreply.github.com
       - name: Start SSHX
@@ -91,5 +91,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.language }}-lsp-wasm
-          path: data/lsp/${{ github.event.inputs.language }}/
+          path: dev/data/lsp/${{ github.event.inputs.language }}/
           retention-days: 90
